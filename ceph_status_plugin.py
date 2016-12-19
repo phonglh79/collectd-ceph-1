@@ -56,17 +56,43 @@ class CephStatusPlugin(base.Base):
                     % (exc, traceback.format_exc()))
             return
 
-        json_stats_data = json.loads(stats_output)
-	data['ceph_cluster'] = {}
-	pgmap = json_stats_data['pgmap']
-	for stat  in ('num_pgs','data_bytes','bytes_used','bytes_avail','bytes_total','degraded_objects', 'degraded_total', 'degraded_ratio', 'misplaced_objects','misplaced_total','misplaced_ratio', 'recovering_objects_per_sec', 'recovering_bytes_per_sec', 'recovering_keys_per_sec', 'num_objects_recovered','num_bytes_recovered', 'num_keys_recovered', 'read_bytes_sec', 'write_bytes_sec', 'read_op_per_sec','write_op_per_sec'):
-	    data['ceph_cluster'][stat] = pgmap[stat] if pgmap.has_key(stat) else 0
+        json_status_data = json.loads(stats_output)
+    	data['ceph_cluster'] = {}
+# read write speed of cluster
+    	pgmap = json_status_data['pgmap']
+    	for stat  in ('num_pgs','data_bytes','bytes_used','bytes_avail','bytes_total', 'recovering_bytes_per_sec', 
+            'read_bytes_sec', 'write_bytes_sec', 'read_op_per_sec','write_op_per_sec', 'op_per_sec'):
+    	    data['ceph_cluster'][stat] = pgmap[stat] if pgmap.has_key(stat) else 0
+# looking for slow request
+        summary = json_status_data['health']['summary']
+        for stat in summary:
+            if stat['summary'].split(" ")[1] == 'requests':
+                data['cluster']['slow_requests'] = stat['summary'].split(" ")[0]
+# osd up/in/down status                
+        osdmap = json_status_data['osdmap']
+        for stat in ('num_osds', 'num_up_osds', 'num_in_osds'):
+            data['ceph_cluster'][stat] = osdmap[stat] if osdmap.has_key(stat) else 0
+        data['ceph_cluster']['num_down_osds'] =  data['ceph_cluster']['num_osds'] - data['ceph_cluster']['num_up_osds']
+# cluster status : OK/WARN/ERROR
+        status = json_status_data['health']['overall_status']
+        if status == "HEALTH_OK":
+            data['ceph_cluster']['status'] = 0
+        if status == "HEALTH_WARN":
+            data['ceph_cluster']['status'] = 1
+        if status == "HEALTH_ERR":
+            data['ceph_cluster']['status'] = 2
+
+
+
+
+
+
         return data
 
 try:
     plugin = CephStatusPlugin()
 except Exception as exc:
-    collectd.error("ceph-status: failed to initialize ceph pool plugin :: %s :: %s"
+    collectd.error("ceph-status: failed to initialize ceph status plugin :: %s :: %s"
             % (exc, traceback.format_exc()))
 
 def configure_callback(conf):
