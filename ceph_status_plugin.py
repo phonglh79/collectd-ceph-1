@@ -45,8 +45,14 @@ class CephStatusPlugin(base.Base):
         """Retrieves stats from ceph pools"""
 
         #ceph_cluster = "." % (self.prefix, self.cluster)
-        ceph_cluster = ".status"
-        data = { ceph_cluster: {} }
+        #ceph_cluster = ".status"
+        #data = { ceph_cluster: {} }
+	ceph_cluster = "."
+        data = {
+            ceph_cluster: {
+                'status':{},
+                },
+        }
 
         stats_output = None
         try:
@@ -57,36 +63,31 @@ class CephStatusPlugin(base.Base):
             return
 
         json_status_data = json.loads(stats_output)
-    	data['ceph_cluster'] = {}
+    	data[ceph_cluster]['status'] = {}
 # read write speed of cluster
     	pgmap = json_status_data['pgmap']
     	for stat  in ('num_pgs','data_bytes','bytes_used','bytes_avail','bytes_total', 'recovering_bytes_per_sec', 
             'read_bytes_sec', 'write_bytes_sec', 'read_op_per_sec','write_op_per_sec', 'op_per_sec'):
-    	    data['ceph_cluster'][stat] = pgmap[stat] if pgmap.has_key(stat) else 0
+    	    data[ceph_cluster]['status'][stat] = pgmap[stat] if pgmap.has_key(stat) else 0
 # looking for slow request
         summary = json_status_data['health']['summary']
+	data[ceph_cluster]['status']['slow_requests'] = 0
         for stat in summary:
             if stat['summary'].split(" ")[1] == 'requests':
-                data['cluster']['slow_requests'] = stat['summary'].split(" ")[0]
+                data[ceph_cluster]['status']['slow_requests'] = stat['summary'].split(" ")[0]
 # osd up/in/down status                
-        osdmap = json_status_data['osdmap']
+        osdmap = json_status_data['osdmap']['osdmap']
         for stat in ('num_osds', 'num_up_osds', 'num_in_osds'):
-            data['ceph_cluster'][stat] = osdmap[stat] if osdmap.has_key(stat) else 0
-        data['ceph_cluster']['num_down_osds'] =  data['ceph_cluster']['num_osds'] - data['ceph_cluster']['num_up_osds']
+            data[ceph_cluster]['status'][stat] = osdmap[stat] if osdmap.has_key(stat) else 0
+        data[ceph_cluster]['status']['num_down_osds'] =  data[ceph_cluster]['status']['num_osds'] - data[ceph_cluster]['status']['num_up_osds']
 # cluster status : OK/WARN/ERROR
         status = json_status_data['health']['overall_status']
         if status == "HEALTH_OK":
-            data['ceph_cluster']['status'] = 0
+            data[ceph_cluster]['status']['overall_status'] = 0
         if status == "HEALTH_WARN":
-            data['ceph_cluster']['status'] = 1
+            data[ceph_cluster]['status']['overall_status'] = 1
         if status == "HEALTH_ERR":
-            data['ceph_cluster']['status'] = 2
-
-
-
-
-
-
+            data[ceph_cluster]['status']['overall_status'] = 2
         return data
 
 try:

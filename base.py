@@ -121,7 +121,7 @@ class Base(object):
             collectd.error("%s: failed to retrieve stats" % self.prefix)
             return
 
-        self.logdebug("dispatching %d new stats :: %s" % (len(stats), stats))
+        self.logdebug("dispatching %d new stats :: ==%s==" % (len(stats), stats))
         try:
             for plugin in stats.keys():
                 for plugin_instance in stats[plugin].keys():
