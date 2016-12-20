@@ -47,21 +47,25 @@ class CephStatusPlugin(base.Base):
         #ceph_cluster = "." % (self.prefix, self.cluster)
         #ceph_cluster = ".status"
         #data = { ceph_cluster: {} }
-	ceph_cluster = "."
+	    ceph_cluster = "."
         data = {
             ceph_cluster: {
                 'status':{},
+                'pools' :{},
+                'df': {},
                 },
         }
 
         stats_output = None
         try:
             stats_output = self.exec_cmd('status')
+            pools_output = self.exec_cmd('osd pool stats')
+            df_output = self.exec_cmd('df')
         except Exception as exc:
             collectd.error("ceph-status: failed to ceph status :: %s :: %s"
                     % (exc, traceback.format_exc()))
             return
-
+######### parse `ceph -s`
         json_status_data = json.loads(stats_output)
     	data[ceph_cluster]['status'] = {}
 # read write speed of cluster
@@ -88,6 +92,34 @@ class CephStatusPlugin(base.Base):
             data[ceph_cluster]['status']['overall_status'] = 1
         if status == "HEALTH_ERR":
             data[ceph_cluster]['status']['overall_status'] = 2
+
+######## parse `ceph osd pool stats`
+        json_pools_data = json.loads(pools_output)
+        data[ceph_cluster]['pools'] = {}
+
+        for pool in json_pools_data:
+            pool_name = pool['pool_name']
+            data[ceph_cluster]['pools'][pool_name] = {}
+            pool_data = data[ceph_cluster]['pools'][pool_name]
+            for stat in ('read_bytes_sec', 'write_bytes_sec', 'op_per_sec', 'write_op_per_sec', 'read_op_per_sec'):
+                pool_data[stat] = pool['client_io_rate'][stat] if pool['client_io_rate'].has_key(stat) else 0
+            for recover_stat in ('recovering_objects_per_sec', 'recovering_bytes_per_sec'):
+                pool_data[recover_stat] = pool['recovery_rate'][recover_stat] if pool['recovery_rate'].has_key(recover_stat) else 0
+
+######## parse `ceph df`        
+        json_df_data = json.loads(df_output)
+        data[ceph_cluster]['df'] = {}
+        for pool in json_df_data['pools']:
+            pool_data = data[ceph_cluster]["pools"]["%s" pool['name']]
+            for stat in ('bytes_used', 'kb_used', 'objects', 'max_avail'):
+                pool_data[stat] = pool['stats'][stat] if pool['stats'].has_key(stat) else 0
+
+        # push totals from df
+        if json_df_data['stats'].has_key('total_bytes'):
+            # ceph 0.84+
+            data[ceph_cluster]['status']['total_space'] = int(json_df_data['stats']['total_bytes'])
+            data[ceph_cluster]['status']['total_used'] = int(json_df_data['stats']['total_used_bytes'])
+            data[ceph_cluster]['status']['total_avail'] = int(json_df_data['stats']['total_avail_bytes'])
         return data
 
 try:
