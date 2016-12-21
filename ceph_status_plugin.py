@@ -47,7 +47,7 @@ class CephStatusPlugin(base.Base):
         #ceph_cluster = "." % (self.prefix, self.cluster)
         #ceph_cluster = ".status"
         #data = { ceph_cluster: {} }
-	    ceph_cluster = "."
+	ceph_cluster = "."
         data = {
             ceph_cluster: {
                 'status':{},
@@ -71,7 +71,7 @@ class CephStatusPlugin(base.Base):
 # read write speed of cluster
     	pgmap = json_status_data['pgmap']
     	for stat  in ('num_pgs','data_bytes','bytes_used','bytes_avail','bytes_total', 'recovering_bytes_per_sec', 
-            'read_bytes_sec', 'write_bytes_sec', 'read_op_per_sec','write_op_per_sec', 'op_per_sec'):
+            'read_bytes_sec', 'write_bytes_sec', 'read_op_per_sec','write_op_per_sec', 'op_per_sec','misplaced_ratio','degraded_ratio'):
     	    data[ceph_cluster]['status'][stat] = pgmap[stat] if pgmap.has_key(stat) else 0
 # looking for slow request
         summary = json_status_data['health']['summary']
@@ -98,7 +98,7 @@ class CephStatusPlugin(base.Base):
         data[ceph_cluster]['pools'] = {}
 
         for pool in json_pools_data:
-            pool_name = pool['pool_name']
+            pool_name = pool['pool_name']+"."
             data[ceph_cluster]['pools'][pool_name] = {}
             pool_data = data[ceph_cluster]['pools'][pool_name]
             for stat in ('read_bytes_sec', 'write_bytes_sec', 'op_per_sec', 'write_op_per_sec', 'read_op_per_sec'):
@@ -110,18 +110,19 @@ class CephStatusPlugin(base.Base):
         json_df_data = json.loads(df_output)
         data[ceph_cluster]['df'] = {}
         for pool in json_df_data['pools']:
-            pool_data = data[ceph_cluster]["pools"]["%s" pool['name']]
+            pool_name = pool['name']+"."
+            pool_data = data[ceph_cluster]["pools"][pool_name]
             for stat in ('bytes_used', 'kb_used', 'objects', 'max_avail'):
                 pool_data[stat] = pool['stats'][stat] if pool['stats'].has_key(stat) else 0
-
+        return data
+'''
         # push totals from df
         if json_df_data['stats'].has_key('total_bytes'):
             # ceph 0.84+
             data[ceph_cluster]['status']['total_space'] = int(json_df_data['stats']['total_bytes'])
             data[ceph_cluster]['status']['total_used'] = int(json_df_data['stats']['total_used_bytes'])
             data[ceph_cluster]['status']['total_avail'] = int(json_df_data['stats']['total_avail_bytes'])
-        return data
-
+'''
 try:
     plugin = CephStatusPlugin()
 except Exception as exc:
